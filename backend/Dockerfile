@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install CPU-only PyTorch first (much smaller than CUDA version)
+# Install CPU-only PyTorch (same accuracy as GPU, just runs inference slightly slower)
 RUN pip install --no-cache-dir \
     torch==2.2.2+cpu \
     torchvision==0.17.2+cpu \
@@ -18,10 +18,11 @@ RUN pip install --no-cache-dir \
     numpy==1.26.4 \
     pydantic==2.7.0
 
-# Copy code and model
+# Copy code and trained model
 COPY server.py .
 COPY models/ models/
 
-EXPOSE 8000
+# Hugging Face Spaces requires port 7860
+EXPOSE 7860
 
-CMD uvicorn server:app --host 0.0.0.0 --port ${PORT:-8000}
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "7860"]
