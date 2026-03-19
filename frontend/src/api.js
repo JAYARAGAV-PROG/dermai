@@ -19,7 +19,7 @@ export async function callGemini(prompt, systemPrompt, imageParts = null) {
     body: JSON.stringify({
       system_instruction: { parts: [{ text: systemPrompt }] },
       contents: [{ role: 'user', parts }],
-      generationConfig: { temperature: 0.3, maxOutputTokens: 4096 }
+      generationConfig: { temperature: 0.3, maxOutputTokens: 8192, responseMimeType: 'application/json' }
     })
   })
   if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e?.error?.message || `Gemini error ${res.status}`) }
@@ -86,9 +86,9 @@ Return ONLY valid JSON. No markdown. Schema:
 export async function runPhase3(p1, p2, meta) {
   const detected = p2.mutations.filter(m=>m.detected).map(m=>m.name).join(', ') || 'None'
   const system = `You are a precision oncology AI building a Digital Twin for in-silico drug simulation.
-Return ONLY valid JSON. No markdown. Schema:
-{"drugs":[{"name":"string","class":"string","efficacy":number,"recommended":bool},{"name":"string","class":"string","efficacy":number,"recommended":false},{"name":"string","class":"string","efficacy":number,"recommended":false},{"name":"string","class":"string","efficacy":number,"recommended":false}],"beforeDesc":"string","afterDesc":"string","plan":"string"}
-Exactly ONE drug recommended:true. Efficacy range 45-95. Real oncology drug names. Plan = 150-200 word physician brief.`
+Return ONLY valid JSON. Schema:
+{"drugs":[{"name":"string","class":"string","efficacy":number,"recommended":bool}],"beforeDesc":"string","afterDesc":"string","plan":"string"}
+Return exactly 4 drugs. ONE recommended:true. Efficacy 45-95. Real drug names. Keep beforeDesc, afterDesc, and plan each under 50 words.`
 
   const raw = await callGemini(
     `Patient: ${meta}\nClassification: ${p1.classification}\nRisk: ${p1.riskScore}%\nDetected mutations: ${detected}\nSimulate drug responses. JSON only.`,
