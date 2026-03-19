@@ -19,7 +19,7 @@ export async function callGemini(prompt, systemPrompt, imageParts = null) {
     body: JSON.stringify({
       system_instruction: { parts: [{ text: systemPrompt }] },
       contents: [{ role: 'user', parts }],
-      generationConfig: { temperature: 0.3, maxOutputTokens: 1000 }
+      generationConfig: { temperature: 0.3, maxOutputTokens: 4096 }
     })
   })
   if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e?.error?.message || `Gemini error ${res.status}`) }
@@ -28,7 +28,12 @@ export async function callGemini(prompt, systemPrompt, imageParts = null) {
 }
 
 export function parseJSON(raw) {
-  return JSON.parse(raw.replace(/```json|```/g, '').trim())
+  try {
+    return JSON.parse(raw.replace(/```json|```/g, '').trim())
+  } catch (e) {
+    console.error('JSON parse failed. Raw response:', raw)
+    throw new Error('AI response was incomplete — please try again')
+  }
 }
 
 // ── ML Backend ────────────────────────────────────────────────────────────────
