@@ -10,7 +10,8 @@ class DermAIRAG:
         self._load_corpus(guidelines_path)
         
         # Build FAISS index
-        self.dimension = self.model.get_sentence_embedding_dimension()
+        dummy_embedding = self.model.encode("dummy")
+        self.dimension = len(dummy_embedding)
         self.index = faiss.IndexFlatL2(self.dimension)
         
         if self.corpus:
