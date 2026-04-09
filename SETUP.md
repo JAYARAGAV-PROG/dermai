@@ -133,7 +133,7 @@ You should see:
 - Fill in age + gender (required)
 - Optionally upload a skin lesion image
 - Click **Run Full Analysis**
-- All 3 phases should run using Gemini AI
+- Phase 1 and Phase 3 use Gemini AI; Phase 2 uses Ollama (via the backend `/phase2` endpoint)
 - Results auto-save to Supabase
 
 ---
@@ -174,6 +174,27 @@ Real scores come after you train the EfficientNet model (Stage 6).
 ### 4D. Test the backend
 Open your browser: **http://localhost:8000/health**
 Should show: `{"status":"ok","model_loaded":false,"demo_mode":true}`
+
+---
+
+## STAGE 4E — Enable Phase 2 (Ollama)
+
+Phase 2 (DNA mutations + pathways) uses a local LLM instead of Gemini.
+
+1. Install Ollama for Windows:
+   - https://ollama.com
+2. Open a terminal and pull the model:
+   ```bash
+   ollama pull llama3.1:8b
+   ```
+3. Ensure Ollama is running (default URL):
+   - `http://localhost:11434`
+4. Start your FastAPI backend (Stage 4C). On startup it will now support:
+   - `POST /phase2`
+
+Optional env defaults (if you want to change them):
+- `OLLAMA_URL` (default `http://localhost:11434`)
+- `OLLAMA_PHASE2_MODEL` (default `llama3.1:8b`)
 
 ---
 
@@ -279,10 +300,10 @@ If you start a new chat with Claude, paste this:
 ```
 I'm building DermAI — an AI skin cancer diagnostic platform.
 3-phase system: Phase 1 = EfficientNet-B4 on HAM10000
-(real probability scores) → Phase 2 = Gemini predicts DNA
+(real probability scores) → Phase 2 = Ollama predicts DNA
 mutations → Phase 3 = Digital Twin simulates drug responses.
 
-Stack: React+Vite frontend, FastAPI backend, Gemini API (free),
+Stack: React+Vite frontend, FastAPI backend, Gemini API (Phase 1/3) + Ollama (Phase 2),
 Supabase (database + image storage), Railway (backend deploy),
 Netlify (frontend deploy).
 

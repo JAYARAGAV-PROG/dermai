@@ -71,15 +71,22 @@ Return ONLY valid JSON. No markdown. Schema:
 
 // ── Phase 2 ───────────────────────────────────────────────────────────────────
 export async function runPhase2(phase1Result, meta) {
-  const system = `You are a computational genomics AI predicting DNA mutations from dermoscopic findings.
-Return ONLY valid JSON. No markdown. Schema:
-{"mutations":[{"name":"BRAF V600E","detected":bool},{"name":"NRAS Q61R","detected":bool},{"name":"KIT D816V","detected":bool},{"name":"CDKN2A","detected":bool},{"name":"TP53","detected":bool},{"name":"PTEN loss","detected":bool},{"name":"MC1R variant","detected":bool},{"name":"NF1","detected":bool}],"analysis":"string","pathways":"string"}`
-
-  const raw = await callGemini(
-    `Classification: ${phase1Result.classification}\nRisk: ${phase1Result.riskScore}%\nPatient: ${meta}\nPredict DNA mutations. JSON only.`,
-    system
-  )
-  return parseJSON(raw)
+  const res = await fetch(`${ML_BACKEND}/phase2`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      phase1: {
+        classification: phase1Result.classification,
+        riskScore: phase1Result.riskScore,
+      },
+      meta,
+    }),
+  })
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}))
+    throw new Error(e?.detail || e?.error?.message || `Phase 2 error ${res.status}`)
+  }
+  return res.json()
 }
 
 // ── Phase 3 ───────────────────────────────────────────────────────────────────

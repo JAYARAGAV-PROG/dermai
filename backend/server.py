@@ -9,8 +9,9 @@ Run locally:
   uvicorn server:app --reload --host 0.0.0.0 --port 8000
 """
 
-import io, json, time
+import io, json, os, time
 from pathlib import Path
+from urllib.request import Request, urlopen
 
 import torch
 import torch.nn as nn
@@ -28,6 +29,21 @@ MODEL_PATH = Path("models/dermai_model_full.pth")
 META_PATH  = Path("models/model_meta.json")
 DEVICE     = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 IMG_SIZE   = 380
+
+# ── Phase 2 (Ollama) ─────────────────────────────────────────────────────────
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/")
+OLLAMA_PHASE2_MODEL = os.getenv("OLLAMA_PHASE2_MODEL", "llama3.1:8b")
+
+PHASE2_MUTATIONS = [
+    "BRAF V600E",
+    "NRAS Q61R",
+    "KIT D816V",
+    "CDKN2A",
+    "TP53",
+    "PTEN loss",
+    "MC1R variant",
+    "NF1",
+]
 
 # ── Model (must match training code exactly) ──────────────────────────────────
 class DermAIClassifier(nn.Module):
@@ -83,6 +99,53 @@ def load_model():
     model.eval()
     return model, meta
 
+def _extract_first_json_object(raw: str) -> dict:
+    """
+    LLMs sometimes return extra text around JSON.
+    We extract the first {...} block and parse it.
+    """
+    raw = raw.strip()
+    if not raw:
+        raise ValueError("Empty model output")
+
+    # Fast path: exact JSON
+    try:
+        return json.loads(raw)
+    except Exception:
+        pass
+
+    start = raw.find("{")
+    end = raw.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        raise ValueError("No JSON object found in model output")
+
+    return json.loads(raw[start : end + 1])
+
+def _call_ollama_generate(prompt: str) -> str:
+    """
+    Calls local Ollama and returns the generated text.
+    """
+    url = f"{OLLAMA_URL}/api/generate"
+    payload = {
+        "model": OLLAMA_PHASE2_MODEL,
+        "prompt": prompt,
+        "stream": False,
+        "options": {"temperature": 0.2},
+    }
+    req = Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urlopen(req, timeout=120) as resp:
+            body = resp.read().decode("utf-8", errors="replace")
+        data = json.loads(body)
+        return data.get("response", "")
+    except Exception as e:
+        raise RuntimeError(f"Ollama call failed: {e}")
+
 # ── FastAPI ───────────────────────────────────────────────────────────────────
 app = FastAPI(title="DermAI ML Backend", version="1.0.0")
 
@@ -121,6 +184,11 @@ class PredictResponse(BaseModel):
     all_probabilities: list[ClassProb]
     inference_ms: float
     demo_mode: bool
+
+# ── Phase 2 (Mutations) ───────────────────────────────────────────────────────
+class Phase2Request(BaseModel):
+    phase1: dict
+    meta: str
 
 # ── Demo prediction (when model not trained yet) ──────────────────────────────
 def demo_predict():
@@ -193,3 +261,55 @@ async def predict(file: UploadFile = File(...)):
         risk_level="high" if mal>65 else "medium" if mal>30 else "low",
         all_probabilities=all_probs, inference_ms=round(ms,2), demo_mode=False
     )
+
+@app.post("/phase2")
+async def phase2(req: Phase2Request):
+    """
+    Returns the exact JSON schema expected by `frontend/src/Phase2.jsx`.
+    """
+    classification = (req.phase1 or {}).get("classification", "")
+    risk_score = (req.phase1 or {}).get("riskScore", None)
+    risk_score_str = str(risk_score) if risk_score is not None else ""
+
+    system = (
+        "You are a computational genomics AI predicting DNA mutations from dermoscopic findings.\n"
+        "Return ONLY valid JSON. No markdown.\n"
+        "Schema:\n"
+        '{"mutations":[{"name":"string","detected":bool}],"analysis":"string","pathways":"string"}\n'
+        "Rules:\n"
+        "- mutations MUST contain exactly 8 objects.\n"
+        f"- Each object.name MUST be EXACTLY one of: {PHASE2_MUTATIONS}.\n"
+        "- Use detected=true/false (real booleans). No extra keys.\n"
+    )
+
+    user = (
+        f"Classification: {classification}\n"
+        f"Risk: {risk_score_str}%\n"
+        f"Patient: {req.meta}\n"
+        "Predict DNA mutations. JSON only."
+    )
+
+    prompt = f"{system}\n\n{user}"
+
+    raw = _call_ollama_generate(prompt)
+    parsed = _extract_first_json_object(raw)
+
+    # Enforce the exact UI contract (8 fixed names).
+    mutations_in = parsed.get("mutations", [])
+    normalized = []
+    for name in PHASE2_MUTATIONS:
+        detected_val = False
+        found = False
+        if isinstance(mutations_in, list):
+            for m in mutations_in:
+                if isinstance(m, dict) and m.get("name") == name:
+                    detected_val = bool(m.get("detected", False))
+                    found = True
+                    break
+        normalized.append({"name": name, "detected": detected_val if found else False})
+
+    return {
+        "mutations": normalized,
+        "analysis": str(parsed.get("analysis", "")),
+        "pathways": str(parsed.get("pathways", "")),
+    }
