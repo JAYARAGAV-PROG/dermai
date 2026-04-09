@@ -1,0 +1,10 @@
+2streamlit
+torch
+torchvision
+transformers
+faiss-cpu
+sentence-transformers
+numpy
+pandas
+pillow
+scikit-learn
