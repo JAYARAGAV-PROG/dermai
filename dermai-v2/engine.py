@@ -65,6 +65,15 @@ class DermAIEngine(nn.Module):
 def load_engine():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = DermAIEngine(metadata_dim=4).to(device)
+    
+    # NEW: Load trained weights if they exist
+    import os
+    base_dir = os.path.dirname(__file__)
+    weights_path = os.path.join(base_dir, "engine_prototype_99.pth")
+    if os.path.exists(weights_path):
+        model.load_state_dict(torch.load(weights_path, map_location=device))
+        print(f"[OK] High-Accuracy Engine loaded: {weights_path}")
+    
     model.eval()
     
     preprocess = transforms.Compose([
