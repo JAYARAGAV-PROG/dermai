@@ -88,61 +88,101 @@ if uploaded_file is not None:
             
             day_slider = st.select_slider("Treatment Timeline (Days)", options=list(range(0, 91, 10)), value=0)
             
-            # --- Three.js 3D Component ---
-            # We pass the slider value to the JS to shrink the tumor.
-            # Max shrinkage is 68% of original size.
+            # --- Advanced Three.js Digital Twin Overhaul ---
             shrink_factor = 1.0 - (0.68 * (day_slider / 90.0))
+            smoothing_factor = (day_slider / 90.0) # 0 to 1
             
             three_js_code = f"""
-            <div id="container" style="width: 100%; height: 400px; background-color: #0e1117;"></div>
+            <div id="container" style="width: 100%; height: 500px; background-color: #050505; border-radius: 10px; overflow: hidden;"></div>
             <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+            <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
             <script>
                 const container = document.getElementById('container');
                 const scene = new THREE.Scene();
-                const camera = new THREE.PerspectiveCamera(75, container.clientWidth / 400, 0.1, 1000);
+                const camera = new THREE.PerspectiveCamera(45, container.clientWidth / 500, 0.1, 1000);
                 const renderer = new THREE.WebGLRenderer({{ antialias: true, alpha: true }});
-                renderer.setSize(container.clientWidth, 400);
+                renderer.setSize(container.clientWidth, 500);
+                renderer.setPixelRatio(window.devicePixelRatio);
                 container.appendChild(renderer.domElement);
 
-                // Create a morphological "tumor" (Sphere with displacement)
-                const geometry = new THREE.IcosahedronGeometry(1.5, 4);
-                const material = new THREE.MeshPhongMaterial({{ 
-                    color: 0x8b0000, 
-                    wireframe: false, 
-                    flatShading: true,
-                    shininess: 10
+                // --- Lighting (Clinical/Studio Setup) ---
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+                scene.add(ambientLight);
+                
+                const mainLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                mainLight.position.set(5, 10, 7.5);
+                scene.add(mainLight);
+
+                const rimLight = new THREE.PointLight(0xff0000, 0.5); // Simulated Subsurface Scattering glow
+                rimLight.position.set(-5, -5, -5);
+                scene.add(rimLight);
+
+                // --- Reference Grid ---
+                const grid = new THREE.GridHelper(10, 20, 0x444444, 0x222222);
+                grid.position.y = -2;
+                scene.add(grid);
+
+                // --- Procedural Irregular Tumor ---
+                // We use displacement to make it irregular
+                const geometry = new THREE.IcosahedronGeometry(1.5, 32); 
+                const position = geometry.attributes.position;
+                const vector = new THREE.Vector3();
+                
+                // Save original positions for shrinking/smoothing
+                const originalPositions = position.array.slice();
+
+                function updateTumorShape(shrink, smooth) {{
+                    for (let i = 0; i < position.count; i++) {{
+                        vector.fromArray(originalPositions, i * 3);
+                        
+                        // Add procedural noise (deterministic for this sample)
+                        const noise = (Math.sin(vector.x * 5) * Math.cos(vector.y * 5) * Math.sin(vector.z * 5)) * 0.3;
+                        
+                        // As treatment progresses (smooth increases), the noise dampens
+                        const currentNoise = noise * (1.0 - smooth);
+                        
+                        const factor = shrink + currentNoise;
+                        vector.multiplyScalar(factor);
+                        position.setXYZ(i, vector.x, vector.y, vector.z);
+                    }}
+                    position.needsUpdate = true;
+                    geometry.computeVertexNormals();
+                }}
+
+                const material = new THREE.MeshStandardMaterial({{ 
+                    color: 0x6e1a1a, 
+                    roughness: 0.3, 
+                    metalness: 0.1,
+                    flatShading: false,
+                    emissive: 0x220000,
+                    emissiveIntensity: 0.2
                 }});
+
                 const tumor = new THREE.Mesh(geometry, material);
                 scene.add(tumor);
 
-                const light = new THREE.DirectionalLight(0xffffff, 1);
-                light.position.set(5, 5, 5).normalize();
-                scene.add(light);
-                scene.add(new THREE.AmbientLight(0x404040));
+                updateTumorShape({shrink_factor}, {smoothing_factor});
 
-                camera.position.z = 5;
-
-                // Shrink based on Streamlit factor
-                const scale = {shrink_factor};
-                tumor.scale.set(scale, scale, scale);
+                camera.position.set(4, 2, 6);
+                const controls = new THREE.OrbitControls(camera, renderer.domElement);
+                controls.enableDamping = true;
 
                 function animate() {{
                     requestAnimationFrame(animate);
-                    tumor.rotation.x += 0.01;
-                    tumor.rotation.y += 0.01;
+                    tumor.rotation.y += 0.005;
+                    controls.update();
                     renderer.render(scene, camera);
                 }}
                 animate();
 
-                // Handle resize
                 window.addEventListener('resize', () => {{
-                    camera.aspect = container.clientWidth / 400;
+                    camera.aspect = container.clientWidth / 500;
                     camera.updateProjectionMatrix();
-                    renderer.setSize(container.clientWidth, 400);
+                    renderer.setSize(container.clientWidth, 500);
                 }});
             </script>
             """
-            components.html(three_js_code, height=420)
+            components.html(three_js_code, height=520)
             
             st.caption(f"3D Morphological Model: Tumor Volume at Day {day_slider} ({int(shrink_factor*100)}% of initial size)")
             
