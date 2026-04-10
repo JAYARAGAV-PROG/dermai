@@ -74,16 +74,7 @@ if uploaded_file is not None:
         st.markdown("---")
         st.subheader("Stage 3: Data-Driven Treatment Recommender")
         
-        sim_mode = st.radio("Simulation Override (For Demo):", ["Use Engine Prediction", "Force BRAF V600E Positive", "Force Wild-Type"])
-        
-        if sim_mode == "Force BRAF V600E Positive":
-            active_mutation = "BRAF_V600E"
-        elif sim_mode == "Force Wild-Type":
-            active_mutation = "Wild_Type"
-        else:
-            active_mutation = st.session_state.mutation_status
-        
-        if active_mutation == "BRAF_V600E":
+        if st.session_state.mutation_status == "BRAF_V600E":
             st.info("Statistical Analysis based on COMBI-d/v Trials (Melanoma)")
             st.write("""
             **Recommended Protocol:** Targeted Therapy (Dabrafenib + Trametinib)
