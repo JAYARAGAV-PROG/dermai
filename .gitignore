@@ -9,3 +9,4 @@ venv/
 *.log
 .DS_Store
 dermai-v2/Resume.txt
+dermai-v2/engine_prototype_99.pth
